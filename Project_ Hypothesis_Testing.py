@@ -18,79 +18,69 @@ states = {'OH': 'Ohio', 'KY': 'Kentucky', 'AS': 'American Samoa', 'NV': 'Nevada'
 def get_list_of_university_towns():
     '''Returns a DataFrame of towns and the states they are in from the 
     university_towns.txt list. The format of the DataFrame should be:
-    DataFrame( [ ["Michigan", "Ann Arbor"], ["Michigan", "Yipsilanti"] ], 
-    columns=["State", "RegionName"]  )
-    
-    The following cleaning needs to be done:
-
-    1. For "State", removing characters from "[" to the end.
-    2. For "RegionName", when applicable, removing every character from " (" to the end.
-    3. Depending on how you read the data, you may need to remove newline character '\n'. '''
-    
-    df = pd.read_table('university_towns.txt',header = None)
-    newlist = []
-    with open('university_towns.txt') as f:
-        for line in f:
-            if 'edit' in line:
-                current_city = line.split('[')[0].strip()
-            else:
-                newlist.append((current_city, line.split('(')[0].strip()))
-            
-    list_final = pd.DataFrame.from_records(newlist)
-    list_final.columns = ['State', 'RegionName']
-    
-    return list_final
-
-
-
+    DataFrame( [ ["Michigan","Ann Arbor"], ["Michigan", "Yipsilanti"] ], 
+    columns=["State","RegionName"]  )'''
+    with open('university_towns.txt') as file:
+        data = []
+        for line in file:
+            data.append(line[:-1])
+    state_town = []
+    for line in data:
+        if line[-6:] == '[edit]':
+            state = line[:-6]
+        elif '(' in line:
+            town = line[:line.index('(')-1]
+            state_town.append([state,town])
+        else:
+            town = line
+            state_town.append([state,town])
+    state_college_df = pd.DataFrame(state_town,columns = ['State','RegionName'])
+    return state_college_df
 
 def get_recession_start():
     '''Returns the year and quarter of the recession start time as a 
     string value in a format such as 2005q3'''
+    x = pd.ExcelFile('gdplev.xls')
+    gdp = x.parse(skiprows=7)#skiprows=17,skip_footer=(38))
+    gdp = gdp[['Unnamed: 4', 'Unnamed: 5']]
+    gdp = gdp.loc[212:]
+    gdp.columns = ['Quarter','GDP']
+    gdp['GDP'] = pd.to_numeric(gdp['GDP'])
+    quarters = []
+    for i in range(len(gdp) - 2):
+        if (gdp.iloc[i][1] > gdp.iloc[i+1][1] and (gdp.iloc[i+1][1] > gdp.iloc[i+2][1])):
+            quarters.append(gdp.iloc[i][0])
+    return quarters[0]   
+        
     
-    df = pd.read_excel('gdplev.xls',skiprows=219)
-    new_data = df[['1999q4',9926.1]]
-    new_data.columns = ['quarter', 'GDP']
-    
-    for i in range(2, len(df)):
-        if (new_data.iloc[i-2][1] > new_data.iloc[i-1][1]) and (new_data.iloc[i-1][1] > new_data.iloc[i][1]):
-            return new_data.iloc[i-2][0]
+ def get_recession_end():
+    x = pd.ExcelFile('gdplev.xls')
+    gdp = x.parse(skiprows=7)#skiprows=17,skip_footer=(38))
+    gdp = gdp[['Unnamed: 4', 'Unnamed: 5']]
+    gdp = gdp.loc[212:]
+    gdp.columns = ['Quarter','GDP']
+    gdp['GDP'] = pd.to_numeric(gdp['GDP'])
+    quarters = []
+    for i in range(len(gdp) - 2):
+        if (gdp.iloc[i][1] < gdp.iloc[i+1][1] and (gdp.iloc[i+1][1] < gdp.iloc[i+2][1]) ):
+            if(gdp.iloc[i][0]>'2008q3'):
+                 quarters.append(gdp.iloc[i+2][0])
+    return quarters[0]
 
-        
-        
-def get_recession_end():
-    '''Returns the year and quarter of the recession end time as a 
-    string value in a format such as 2005q3'''
-    
-    df = pd.read_excel('gdplev.xls',skiprows=219)
-    new_data = df[['1999q4',9926.1]]
-    new_data.columns = ['quarter', 'GDP']
-    
-    point_start = get_recession_start()
-    
-    start_index = new_data[new_data['quarter'] == point_start].index.tolist()[0]
-    
-    new_data=new_data.iloc[start_index:]
-    for i in range(2, len(new_data)):
-        if (new_data.iloc[i-2][1] < new_data.iloc[i-1][1]) and (new_data.iloc[i-1][1] < new_data.iloc[i][1]):
-            return new_data.iloc[i][0]
 
-        
-        
-        
 def get_recession_bottom():
     '''Returns the year and quarter of the recession bottom time as a 
     string value in a format such as 2005q3'''
-    
-    df = pd.read_excel('gdplev.xls',skiprows=219)
-    new_data = df[['1999q4',9926.1]]
-    new_data.columns = ['quarter', 'GDP']
-    
-    rec_start = new_data.index[new_data['quarter'] == get_recession_start()][0]
-    rec_end = new_data.index[new_data['quarter'] == get_recession_end()][0]
-    
-    return new_data.iloc[new_data.iloc[rec_start:rec_end+1, 1 ].idxmin(), 0]
-
+    x = pd.ExcelFile('gdplev.xls')
+    gdp = x.parse(skiprows=7)#skiprows=17,skip_footer=(38))
+    gdp = gdp[['Unnamed: 4', 'Unnamed: 5']]
+    gdp = gdp.loc[212:]
+    gdp.columns = ['Quarter','GDP']
+    gdp['GDP'] = pd.to_numeric(gdp['GDP'])
+    rec_start = get_recession_start()
+    rec_end = get_recession_end()
+    new_data = gdp[gdp['Quarter']>rec_start]
+    return  new_data.loc[new_data['GDP'].idxmin()][0]
 
 
 def convert_housing_data_to_quarters():
@@ -104,24 +94,29 @@ def convert_housing_data_to_quarters():
     
     The resulting dataframe should have 67 columns, and 10,730 rows.
     '''
-    df = pd.read_csv('City_Zhvi_AllHomes.csv')
-    df['State'] = df['State'].map(states)
-    df.set_index(['State', 'RegionName'], inplace=True)
-    df = df.loc[:, '2000-01': ]
-
-    new_columns = [str(x)+y for x in range(2000, 2017) for y in ['q1', 'q2', 'q3', 'q4']]
-    new_columns = new_columns[:-1] # drop the last quarter of 2016
-
-    x = 0
-
-    for c in new_columns:
-        df[c] = df.iloc[:, x:x+3].mean(axis=1)
+    import pandas as pd
+    house_df = pd.read_csv('City_Zhvi_AllHomes.csv')
+    house_df['State'] = house_df['State'].map(states)
+    house_df.set_index(['State','RegionName'],inplace = True)
+    house_df = house_df.loc[:,'2000-01':]
+    # creat new columns representing yearname and quarter as string
+    # using list comprehensions
+    new_columns = [str(x)+y for x in range(2000,2017) for y in ['q1','q2','q3','q4']]
+    '''
+    Alternate way:
+    new_columns = []
+    for x in range(2000,2017):
+        for y in ['q1','q2' ,'q3','q4']:
+            new_columns.append(str(x)+y)
+        '''
+    #dropping last column i.e 2016q4
+    new_columns.pop()
+    x=0
+    for col in new_columns:
+        house_df[col] = house_df.iloc[:,x:x+3].mean(axis=1)
         x = x+3
-
-    df = df.loc[:, '2000q1':]
-
-
-    return df
+    house_df = house_df.loc[:,'2000q1':]
+    return house_df
 
 # Hypothesis Testing
 
